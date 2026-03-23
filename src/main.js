@@ -20,6 +20,7 @@ let monthlyIncomeDraft = ''
 let currentFormDate = getTodayIsoDate()
 let calendarOpen = false
 let calendarViewDate = `${currentFormDate.slice(0, 7)}-01`
+let timelineViewMode = 'month'
 let formDraft = {
   description: '',
   amount: '',
@@ -218,6 +219,10 @@ function getSummary(state) {
   }
 }
 
+function entryTitleForView() {
+  return timelineViewMode === 'day' ? 'por dia' : 'por mes'
+}
+
 function renderCategoryList(categoryData) {
   if (!categoryData.length) {
     return '<p class="empty-state">Adicione gastos para ver a distribuicao por categoria.</p>'
@@ -321,79 +326,209 @@ function renderTransactions(state) {
   `
 }
 
-function renderMonthlyOverview(state) {
+function renderTimelineOverview(state, viewMode = 'month') {
   const entries = {}
+  const getEntryKey = (date) => (viewMode === 'day' ? String(date) : String(date).slice(0, 7))
+  const getEntryLabel = (date) => {
+    if (viewMode === 'day') {
+      return new Date(`${String(date)}T12:00:00`).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+      })
+    }
 
-  const monthlyIncomeEntry = getMonthlyIncomeEntry(state)
-
-  if (monthlyIncomeEntry) {
-    const month = new Date(`${monthlyIncomeEntry.date}T12:00:00`).toLocaleDateString('pt-BR', {
+    return new Date(`${String(date).slice(0, 7)}-01T12:00:00`).toLocaleDateString('pt-BR', {
       month: 'short',
     })
+  }
+  const monthlyIncomeEntry = getMonthlyIncomeEntry(state)
 
-    entries[month] = { month, gastos: 0, entradas: monthlyIncomeEntry.amount, reserva: 0 }
+  if (monthlyIncomeEntry && viewMode === 'month') {
+    const entryKey = getEntryKey(monthlyIncomeEntry.date)
+    entries[entryKey] = { label: getEntryLabel(monthlyIncomeEntry.date), entryKey, gastos: 0, entradas: monthlyIncomeEntry.amount, reserva: 0 }
   }
 
   state.transactions.forEach((item) => {
-    const month = new Date(`${item.date}T12:00:00`).toLocaleDateString('pt-BR', {
-      month: 'short',
-    })
+    const entryKey = getEntryKey(item.date)
 
-    if (!entries[month]) {
-      entries[month] = { month, gastos: 0, entradas: 0, reserva: 0 }
+    if (!entries[entryKey]) {
+      entries[entryKey] = { label: getEntryLabel(item.date), entryKey, gastos: 0, entradas: 0, reserva: 0 }
     }
 
     if (item.type === 'expense') {
-      entries[month].gastos += item.amount
+      entries[entryKey].gastos += item.amount
     } else if (item.type === 'reserve') {
-      entries[month].reserva += item.amount
+      entries[entryKey].reserva += item.amount
     } else {
-      entries[month].entradas += item.amount
+      entries[entryKey].entradas += item.amount
     }
   })
 
-  const months = Object.values(entries)
+  const timelineItems = Object.values(entries).sort((a, b) => a.entryKey.localeCompare(b.entryKey))
 
-  if (!months.length) {
+  if (!timelineItems.length) {
     return '<p class="empty-state">Os graficos aparecem assim que voce registrar movimentacoes.</p>'
   }
 
-  const highestValue = Math.max(...months.flatMap((item) => [item.gastos, item.entradas, item.reserva]), 1)
+  const chartHeight = 220
+  const chartWidth = 560
+  const paddingTop = 20
+  const paddingRight = 22
+  const paddingBottom = 42
+  const paddingLeft = 18
+  const maxValue = Math.max(...timelineItems.flatMap((item) => [item.gastos, item.entradas, item.reserva]), 1)
+  const chartMaxValue = maxValue * 1.12
+  const innerWidth = chartWidth - paddingLeft - paddingRight
+  const innerHeight = chartHeight - paddingTop - paddingBottom
+  const plotTop = paddingTop + 4
+  const plotBottom = paddingTop + innerHeight - 10
+  const plotHeight = plotBottom - plotTop
+  const stepX = timelineItems.length > 1 ? innerWidth / (timelineItems.length - 1) : 0
+  const yForValue = (value) => plotBottom - (value / chartMaxValue) * plotHeight
+  const xForIndex = (index) => paddingLeft + stepX * index
+  const gridValues = Array.from({ length: 4 }, (_, index) => Math.round((chartMaxValue / 3) * index))
+  const axisLabelStep = viewMode === 'day' && timelineItems.length > 8 ? Math.ceil(timelineItems.length / 6) : 1
+  const series = [
+    { key: 'entradas', label: 'Entradas', className: 'income-line', gradientId: 'timelineStrokeIncome' },
+    { key: 'gastos', label: 'Gastos', className: 'expense-line', gradientId: 'timelineStrokeExpense' },
+    { key: 'reserva', label: 'Reserva', className: 'reserve-line', gradientId: 'timelineStrokeReserve' },
+  ]
+  const chartPoints = (key) =>
+    timelineItems.map((item, index) => ({
+      x: xForIndex(index),
+      y: yForValue(item[key]),
+    }))
+
+  const buildSmoothPath = (points) => {
+    if (!points.length) {
+      return ''
+    }
+
+    if (points.length === 1) {
+      return `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`
+    }
+
+    if (points.length === 2) {
+      return `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} Q ${((points[0].x + points[1].x) / 2).toFixed(2)} ${points[0].y.toFixed(2)} ${points[1].x.toFixed(2)} ${points[1].y.toFixed(2)}`
+    }
+
+    const line = (pointA, pointB) => ({
+      length: Math.hypot(pointB.x - pointA.x, pointB.y - pointA.y),
+      angle: Math.atan2(pointB.y - pointA.y, pointB.x - pointA.x),
+    })
+    const controlPoint = (current, previous, next, reverse = false) => {
+      const previousPoint = previous || current
+      const nextPoint = next || current
+      const smoothing = 0.18
+      const segment = line(previousPoint, nextPoint)
+      const angle = segment.angle + (reverse ? Math.PI : 0)
+      const length = segment.length * smoothing
+
+      return {
+        x: current.x + Math.cos(angle) * length,
+        y: current.y + Math.sin(angle) * length,
+      }
+    }
+
+    let path = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const current = points[index]
+      const next = points[index + 1]
+      const cps = controlPoint(current, points[index - 1], next)
+      const cpe = controlPoint(next, current, points[index + 2], true)
+
+      path += ` C ${cps.x.toFixed(2)} ${cps.y.toFixed(2)}, ${cpe.x.toFixed(2)} ${cpe.y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`
+    }
+
+    return path
+  }
 
   return `
-    <div class="bars-panel">
-      ${months
-        .map(
-          (item) => `
-            <div class="month-card">
-              <strong>${item.month}</strong>
-              <div class="month-bars">
-                <div class="month-bar-wrap">
-                  <span>Entradas</span>
-                  <div class="month-bar-track">
-                    <div class="month-bar income-bar" style="width: ${(item.entradas / highestValue) * 100}%"></div>
-                  </div>
-                  <small>${formatCurrency(item.entradas)}</small>
-                </div>
-                <div class="month-bar-wrap">
-                  <span>Gastos</span>
-                  <div class="month-bar-track">
-                    <div class="month-bar expense-bar" style="width: ${(item.gastos / highestValue) * 100}%"></div>
-                  </div>
-                  <small>${formatCurrency(item.gastos)}</small>
-                </div>
-                <div class="month-bar-wrap">
-                  <span>Reserva</span>
-                  <div class="month-bar-track">
-                    <div class="month-bar reserve-bar" style="width: ${(item.reserva / highestValue) * 100}%"></div>
-                  </div>
-                  <small>${formatCurrency(item.reserva)}</small>
-                </div>
+    <div class="timeline-panel">
+      <div class="timeline-legend">
+        ${series
+          .map(
+            (item) => `
+              <span class="timeline-legend-item">
+                <i class="timeline-swatch ${item.className}"></i>
+                ${item.label}
+              </span>
+            `,
+          )
+          .join('')}
+      </div>
+
+      <div class="timeline-chart-wrap">
+        <svg class="timeline-chart" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Grafico de linha com entradas, gastos e reserva ${viewMode === 'day' ? 'por dia' : 'por mes'}">
+          <defs>
+            <linearGradient id="timelineStrokeIncome" gradientUnits="userSpaceOnUse" x1="${paddingLeft}" y1="${plotTop}" x2="${chartWidth - paddingRight}" y2="${plotBottom}">
+              <stop offset="0%" stop-color="#1dd4bf"></stop>
+              <stop offset="45%" stop-color="#34d399"></stop>
+              <stop offset="100%" stop-color="#8bffcf"></stop>
+            </linearGradient>
+            <linearGradient id="timelineStrokeExpense" gradientUnits="userSpaceOnUse" x1="${paddingLeft}" y1="${plotTop}" x2="${chartWidth - paddingRight}" y2="${plotBottom}">
+              <stop offset="0%" stop-color="#ff8757"></stop>
+              <stop offset="50%" stop-color="#fb7185"></stop>
+              <stop offset="100%" stop-color="#ffc0cb"></stop>
+            </linearGradient>
+            <linearGradient id="timelineStrokeReserve" gradientUnits="userSpaceOnUse" x1="${paddingLeft}" y1="${plotTop}" x2="${chartWidth - paddingRight}" y2="${plotBottom}">
+              <stop offset="0%" stop-color="#38bdf8"></stop>
+              <stop offset="50%" stop-color="#60a5fa"></stop>
+              <stop offset="100%" stop-color="#93c5fd"></stop>
+            </linearGradient>
+          </defs>
+
+          ${gridValues
+            .map(
+              (value) => `
+                <g>
+                  <line class="timeline-grid-line" x1="${paddingLeft}" y1="${yForValue(value)}" x2="${chartWidth - paddingRight}" y2="${yForValue(value)}"></line>
+                  <text class="timeline-grid-label" x="${chartWidth - paddingRight}" y="${yForValue(value) - 6}" text-anchor="end">${formatCurrency(value)}</text>
+                </g>
+              `,
+            )
+            .join('')}
+
+          ${series
+            .map(
+              (item) => `
+                <path class="timeline-path ${item.className}" d="${buildSmoothPath(chartPoints(item.key))}" stroke="url(#${item.gradientId})"></path>
+                ${timelineItems
+                  .map(
+                    (timelineItem, index) => `
+                      <circle class="timeline-point ${item.className}" cx="${xForIndex(index)}" cy="${yForValue(timelineItem[item.key])}" r="4.5"></circle>
+                    `,
+                  )
+                  .join('')}
+              `,
+            )
+            .join('')}
+
+          ${timelineItems
+            .map(
+              (item, index) => `
+                <text class="timeline-axis-label" x="${xForIndex(index)}" y="${chartHeight - 10}" text-anchor="middle">${index % axisLabelStep === 0 || index === timelineItems.length - 1 ? item.label : ''}</text>
+              `,
+            )
+            .join('')}
+        </svg>
+      </div>
+
+      <div class="timeline-summary">
+        ${timelineItems
+          .map(
+            (item) => `
+              <div class="timeline-summary-card">
+                <strong>${item.label}</strong>
+                <span>Entradas: ${formatCurrency(item.entradas)}</span>
+                <span>Gastos: ${formatCurrency(item.gastos)}</span>
+                <span>Reserva: ${formatCurrency(item.reserva)}</span>
               </div>
-            </div>
-          `,
-        )
-        .join('')}
+            `,
+          )
+          .join('')}
+      </div>
     </div>
   `
 }
@@ -580,9 +715,15 @@ function createAppMarkup(state) {
               <article class="panel-card chart-card">
                 <div class="section-heading compact">
                   <p class="eyebrow">Linha do tempo</p>
-                  <h2>Entradas, gastos e reserva por mes</h2>
+                  <div class="timeline-header-row">
+                    <h2>Entradas, gastos e reserva ${entryTitleForView()}</h2>
+                    <div class="view-toggle" role="tablist" aria-label="Alternar visualizacao do grafico">
+                      <button type="button" class="view-toggle-button ${timelineViewMode === 'day' ? 'is-active' : ''}" data-timeline-view="day">Dia</button>
+                      <button type="button" class="view-toggle-button ${timelineViewMode === 'month' ? 'is-active' : ''}" data-timeline-view="month">Mes</button>
+                    </div>
+                  </div>
                 </div>
-                ${renderMonthlyOverview(state)}
+                ${renderTimelineOverview(state, timelineViewMode)}
               </article>
             </div>
 
@@ -641,6 +782,13 @@ function renderApp() {
 
   form.querySelector('select[name="type"]').addEventListener('change', (event) => {
     formDraft.type = event.target.value
+  })
+
+  document.querySelectorAll('[data-timeline-view]').forEach((button) => {
+    button.addEventListener('click', () => {
+      timelineViewMode = button.dataset.timelineView === 'day' ? 'day' : 'month'
+      renderApp()
+    })
   })
 
   dateInput.addEventListener('input', (event) => {
