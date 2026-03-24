@@ -506,6 +506,7 @@ button {
 }
 
 .timeline-chart-wrap {
+  position: relative;
   padding: 18px 18px 12px;
   border-radius: 22px;
   background: rgba(15, 23, 42, 0.22);
@@ -518,35 +519,67 @@ button {
   overflow: visible;
 }
 
-.timeline-tooltip-card {
-  min-height: 58px;
-  margin-bottom: 12px;
-  padding: 12px 14px;
+.timeline-point-popover {
+  position: absolute;
+  z-index: 5;
+  width: min(220px, calc(100% - 24px));
+  padding: 14px 14px 12px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  color: var(--text-muted);
+  background: rgba(8, 15, 26, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  transform: translate(14px, calc(-100% - 8px));
 }
 
-.timeline-tooltip-card.is-visible {
-  background: rgba(11, 26, 43, 0.78);
+.timeline-point-popover::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  bottom: -8px;
+  width: 14px;
+  height: 14px;
+  background: rgba(8, 15, 26, 0.96);
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  transform: rotate(45deg);
 }
 
-.timeline-tooltip-card strong,
-.timeline-tooltip-card b,
-.timeline-tooltip-card span {
+.timeline-point-popover strong,
+.timeline-point-popover span,
+.timeline-point-popover b {
   display: block;
 }
 
-.timeline-tooltip-card strong {
+.timeline-point-popover strong {
   color: #f8fafc;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+  font-size: 0.96rem;
 }
 
-.timeline-tooltip-card b {
-  margin-top: 4px;
+.timeline-point-popover span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.timeline-point-popover b {
+  margin-top: 8px;
   color: #f8fafc;
-  font-size: 1.02rem;
+  font-size: 1rem;
+}
+
+.timeline-point-popover-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f8fafc;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
 }
 
 .timeline-grid-line {
@@ -569,19 +602,25 @@ button {
   filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.12));
 }
 
+.timeline-hit-area {
+  fill: transparent;
+  cursor: pointer;
+  pointer-events: all;
+}
+
 .timeline-point {
   fill: currentColor;
   stroke: rgba(15, 23, 42, 0.95);
   stroke-width: 1.25;
-  cursor: pointer;
-  transition: transform 0.18s ease, stroke-width 0.18s ease, filter 0.18s ease;
+  pointer-events: none;
+  transition: stroke-width 0.18s ease, filter 0.18s ease, opacity 0.18s ease;
 }
 
 .timeline-point:hover,
 .timeline-point.is-active {
-  transform: scale(1.18);
   stroke-width: 2;
   filter: drop-shadow(0 0 10px rgba(248, 250, 252, 0.18));
+  opacity: 1;
 }
 
 .timeline-summary {

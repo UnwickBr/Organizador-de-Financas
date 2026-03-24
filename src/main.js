@@ -404,11 +404,20 @@ function renderTimelineOverview(state, viewMode = 'month') {
     { key: 'gastos', label: 'Gastos', className: 'expense-line', gradientId: 'timelineStrokeExpense' },
     { key: 'reserva', label: 'Reserva', className: 'reserve-line', gradientId: 'timelineStrokeReserve' },
   ]
-  const activePointExists = selectedTimelinePoint
-    ? timelineItems.some((item) => item.entryKey === selectedTimelinePoint.entryKey) &&
-      series.some((seriesItem) => seriesItem.key === selectedTimelinePoint.seriesKey)
-    : false
-  const activePoint = activePointExists ? selectedTimelinePoint : null
+  const activeTimelineItem = selectedTimelinePoint
+    ? timelineItems.find((item) => item.entryKey === selectedTimelinePoint.entryKey)
+    : null
+  const activeSeries = selectedTimelinePoint
+    ? series.find((seriesItem) => seriesItem.key === selectedTimelinePoint.seriesKey)
+    : null
+  const activePoint =
+    activeTimelineItem && activeSeries
+      ? {
+          ...selectedTimelinePoint,
+          x: xForIndex(timelineItems.findIndex((item) => item.entryKey === activeTimelineItem.entryKey)),
+          y: yForValue(activeTimelineItem[activeSeries.key]),
+        }
+      : null
   const chartPoints = (key) =>
     timelineItems.map((item, index) => ({
       x: xForIndex(index),
@@ -476,17 +485,21 @@ function renderTimelineOverview(state, viewMode = 'month') {
       </div>
 
       <div class="timeline-chart-wrap">
-        <div class="timeline-tooltip-card ${activePoint ? 'is-visible' : ''}">
-          ${
-            activePoint
-              ? `
+        ${
+          activePoint
+            ? `
+              <div
+                class="timeline-point-popover"
+                style="left:${((activePoint.x / chartWidth) * 100).toFixed(2)}%; top:${((activePoint.y / chartHeight) * 100).toFixed(2)}%;"
+              >
+                <button type="button" class="timeline-point-popover-close" data-close-timeline-popup="true" aria-label="Fechar pop-up">x</button>
                 <strong>${activePoint.seriesLabel}</strong>
                 <span>${activePoint.entryLabel}</span>
                 <b>${formatCurrency(activePoint.value)}</b>
-              `
-              : '<span>Clique em uma bolinha para ver o valor exato.</span>'
-          }
-        </div>
+              </div>
+            `
+            : ''
+        }
         <svg class="timeline-chart" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Grafico de linha com entradas, gastos e reserva ${viewMode === 'day' ? 'por dia' : 'por mes'}">
           <defs>
             <linearGradient id="timelineStrokeIncome" gradientUnits="userSpaceOnUse" x1="${paddingLeft}" y1="${plotTop}" x2="${chartWidth - paddingRight}" y2="${plotBottom}">
@@ -525,10 +538,10 @@ function renderTimelineOverview(state, viewMode = 'month') {
                   .map(
                     (timelineItem, index) => `
                       <circle
-                        class="timeline-point ${item.className} ${activePoint && activePoint.entryKey === timelineItem.entryKey && activePoint.seriesKey === item.key ? 'is-active' : ''}"
+                        class="timeline-hit-area"
                         cx="${xForIndex(index)}"
                         cy="${yForValue(timelineItem[item.key])}"
-                        r="5"
+                        r="14"
                         tabindex="0"
                         role="button"
                         aria-label="${item.label} em ${timelineItem.label}: ${formatCurrency(timelineItem[item.key])}"
@@ -539,6 +552,12 @@ function renderTimelineOverview(state, viewMode = 'month') {
                         data-series-key="${item.key}"
                         data-series-label="${item.label}"
                         data-value="${timelineItem[item.key]}"
+                      ></circle>
+                      <circle
+                        class="timeline-point ${item.className} ${activePoint && activePoint.entryKey === timelineItem.entryKey && activePoint.seriesKey === item.key ? 'is-active' : ''}"
+                        cx="${xForIndex(index)}"
+                        cy="${yForValue(timelineItem[item.key])}"
+                        r="5"
                       ></circle>
                     `,
                   )
@@ -834,26 +853,40 @@ function renderApp() {
     })
   })
 
-  document.querySelectorAll('[data-timeline-point]').forEach((point) => {
-    const handleSelectPoint = () => {
-      selectedTimelinePoint = {
-        key: point.dataset.pointKey,
-        entryKey: point.dataset.entryKey,
-        entryLabel: point.dataset.entryLabel,
-        seriesKey: point.dataset.seriesKey,
-        seriesLabel: point.dataset.seriesLabel,
-        value: Number(point.dataset.value || 0),
-      }
-      renderApp()
+  const selectTimelinePoint = (point) => {
+    selectedTimelinePoint = {
+      key: point.dataset.pointKey,
+      entryKey: point.dataset.entryKey,
+      entryLabel: point.dataset.entryLabel,
+      seriesKey: point.dataset.seriesKey,
+      seriesLabel: point.dataset.seriesLabel,
+      value: Number(point.dataset.value || 0),
     }
+    renderApp()
+  }
 
-    point.addEventListener('click', handleSelectPoint)
+  root.querySelectorAll('[data-timeline-point]').forEach((point) => {
     point.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
-        handleSelectPoint()
+        selectTimelinePoint(point)
       }
     })
+  })
+
+  root.addEventListener('click', (event) => {
+    const closeButton = event.target.closest('[data-close-timeline-popup]')
+    if (closeButton) {
+      selectedTimelinePoint = null
+      renderApp()
+      return
+    }
+
+    const point = event.target.closest('[data-timeline-point]')
+    if (point) {
+      selectTimelinePoint(point)
+      return
+    }
   })
 
   dateInput.addEventListener('input', (event) => {
