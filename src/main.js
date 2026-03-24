@@ -190,10 +190,20 @@ function getDisplayTransactions(state) {
   return monthlyIncomeEntry ? [monthlyIncomeEntry, ...state.transactions] : state.transactions
 }
 
+function getCurrentMonthKey(date = getTodayIsoDate()) {
+  return String(date).slice(0, 7)
+}
+
+function getCurrentMonthTransactions(state) {
+  const currentMonthKey = getCurrentMonthKey()
+  return state.transactions.filter((item) => String(item.date).slice(0, 7) === currentMonthKey)
+}
+
 function getSummary(state) {
-  const expenses = state.transactions.filter((item) => item.type === 'expense')
-  const incomes = state.transactions.filter((item) => item.type === 'income')
-  const reserves = state.transactions.filter((item) => item.type === 'reserve')
+  const currentMonthTransactions = getCurrentMonthTransactions(state)
+  const expenses = currentMonthTransactions.filter((item) => item.type === 'expense')
+  const incomes = currentMonthTransactions.filter((item) => item.type === 'income')
+  const reserves = currentMonthTransactions.filter((item) => item.type === 'reserve')
 
   const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0)
   const extraIncome = incomes.reduce((sum, item) => sum + item.amount, 0)
@@ -215,7 +225,7 @@ function getSummary(state) {
     totalIncome,
     totalReserve,
     balance,
-    transactionCount: getDisplayTransactions(state).length,
+    transactionCount: currentMonthTransactions.length + (state.monthlyIncome > 0 ? 1 : 0),
     categoryData,
   }
 }
