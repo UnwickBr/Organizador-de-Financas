@@ -416,7 +416,7 @@ button {
 }
 
 .chart-card {
-  min-height: 360px;
+  min-height: 430px;
 }
 
 .list-card {
@@ -506,7 +506,7 @@ button {
 }
 
 .timeline-chart-wrap {
-  padding: 16px 14px 8px;
+  padding: 18px 18px 12px;
   border-radius: 22px;
   background: rgba(15, 23, 42, 0.22);
   border: 1px solid rgba(148, 163, 184, 0.1);
@@ -516,6 +516,37 @@ button {
   width: 100%;
   height: auto;
   overflow: visible;
+}
+
+.timeline-tooltip-card {
+  min-height: 58px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+}
+
+.timeline-tooltip-card.is-visible {
+  background: rgba(11, 26, 43, 0.78);
+}
+
+.timeline-tooltip-card strong,
+.timeline-tooltip-card b,
+.timeline-tooltip-card span {
+  display: block;
+}
+
+.timeline-tooltip-card strong {
+  color: #f8fafc;
+  margin-bottom: 2px;
+}
+
+.timeline-tooltip-card b {
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: 1.02rem;
 }
 
 .timeline-grid-line {
@@ -542,6 +573,15 @@ button {
   fill: currentColor;
   stroke: rgba(15, 23, 42, 0.95);
   stroke-width: 1.25;
+  cursor: pointer;
+  transition: transform 0.18s ease, stroke-width 0.18s ease, filter 0.18s ease;
+}
+
+.timeline-point:hover,
+.timeline-point.is-active {
+  transform: scale(1.18);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 10px rgba(248, 250, 252, 0.18));
 }
 
 .timeline-summary {

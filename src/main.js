@@ -21,6 +21,7 @@ let currentFormDate = getTodayIsoDate()
 let calendarOpen = false
 let calendarViewDate = `${currentFormDate.slice(0, 7)}-01`
 let timelineViewMode = 'month'
+let selectedTimelinePoint = null
 let formDraft = {
   description: '',
   amount: '',
@@ -370,8 +371,8 @@ function renderTimelineOverview(state, viewMode = 'month') {
     return '<p class="empty-state">Os graficos aparecem assim que voce registrar movimentacoes.</p>'
   }
 
-  const chartHeight = 220
-  const chartWidth = 560
+  const chartHeight = 280
+  const chartWidth = 680
   const paddingTop = 20
   const paddingRight = 22
   const paddingBottom = 42
@@ -393,6 +394,11 @@ function renderTimelineOverview(state, viewMode = 'month') {
     { key: 'gastos', label: 'Gastos', className: 'expense-line', gradientId: 'timelineStrokeExpense' },
     { key: 'reserva', label: 'Reserva', className: 'reserve-line', gradientId: 'timelineStrokeReserve' },
   ]
+  const activePointExists = selectedTimelinePoint
+    ? timelineItems.some((item) => item.entryKey === selectedTimelinePoint.entryKey) &&
+      series.some((seriesItem) => seriesItem.key === selectedTimelinePoint.seriesKey)
+    : false
+  const activePoint = activePointExists ? selectedTimelinePoint : null
   const chartPoints = (key) =>
     timelineItems.map((item, index) => ({
       x: xForIndex(index),
@@ -460,6 +466,17 @@ function renderTimelineOverview(state, viewMode = 'month') {
       </div>
 
       <div class="timeline-chart-wrap">
+        <div class="timeline-tooltip-card ${activePoint ? 'is-visible' : ''}">
+          ${
+            activePoint
+              ? `
+                <strong>${activePoint.seriesLabel}</strong>
+                <span>${activePoint.entryLabel}</span>
+                <b>${formatCurrency(activePoint.value)}</b>
+              `
+              : '<span>Clique em uma bolinha para ver o valor exato.</span>'
+          }
+        </div>
         <svg class="timeline-chart" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Grafico de linha com entradas, gastos e reserva ${viewMode === 'day' ? 'por dia' : 'por mes'}">
           <defs>
             <linearGradient id="timelineStrokeIncome" gradientUnits="userSpaceOnUse" x1="${paddingLeft}" y1="${plotTop}" x2="${chartWidth - paddingRight}" y2="${plotBottom}">
@@ -497,7 +514,22 @@ function renderTimelineOverview(state, viewMode = 'month') {
                 ${timelineItems
                   .map(
                     (timelineItem, index) => `
-                      <circle class="timeline-point ${item.className}" cx="${xForIndex(index)}" cy="${yForValue(timelineItem[item.key])}" r="4.5"></circle>
+                      <circle
+                        class="timeline-point ${item.className} ${activePoint && activePoint.entryKey === timelineItem.entryKey && activePoint.seriesKey === item.key ? 'is-active' : ''}"
+                        cx="${xForIndex(index)}"
+                        cy="${yForValue(timelineItem[item.key])}"
+                        r="5"
+                        tabindex="0"
+                        role="button"
+                        aria-label="${item.label} em ${timelineItem.label}: ${formatCurrency(timelineItem[item.key])}"
+                        data-timeline-point="true"
+                        data-point-key="${viewMode}:${timelineItem.entryKey}:${item.key}"
+                        data-entry-key="${timelineItem.entryKey}"
+                        data-entry-label="${timelineItem.label}"
+                        data-series-key="${item.key}"
+                        data-series-label="${item.label}"
+                        data-value="${timelineItem[item.key]}"
+                      ></circle>
                     `,
                   )
                   .join('')}
@@ -787,7 +819,30 @@ function renderApp() {
   document.querySelectorAll('[data-timeline-view]').forEach((button) => {
     button.addEventListener('click', () => {
       timelineViewMode = button.dataset.timelineView === 'day' ? 'day' : 'month'
+      selectedTimelinePoint = null
       renderApp()
+    })
+  })
+
+  document.querySelectorAll('[data-timeline-point]').forEach((point) => {
+    const handleSelectPoint = () => {
+      selectedTimelinePoint = {
+        key: point.dataset.pointKey,
+        entryKey: point.dataset.entryKey,
+        entryLabel: point.dataset.entryLabel,
+        seriesKey: point.dataset.seriesKey,
+        seriesLabel: point.dataset.seriesLabel,
+        value: Number(point.dataset.value || 0),
+      }
+      renderApp()
+    }
+
+    point.addEventListener('click', handleSelectPoint)
+    point.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        handleSelectPoint()
+      }
     })
   })
 
